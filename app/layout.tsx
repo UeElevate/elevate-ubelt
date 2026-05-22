@@ -11,8 +11,8 @@ export const metadata: Metadata = {
   description: 'Welcome to our Youth Ministry - Connect, Grow, Serve',
   generator: 'v0.app',
   icons: {
-    icon: '/elevate_ubelt_logo.png',
-    apple: '/elevate_ubelt_logo.png',
+    icon: '/elevate.jpg',
+    apple: '/elevate.jpg',
   },
 }
 
