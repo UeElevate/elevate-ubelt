@@ -75,6 +75,36 @@ export interface PrayerRequest {
   created_at: string
 }
 
+export type FormFieldType = 'text' | 'textarea' | 'email' | 'number' | 'select' | 'radio' | 'checkbox' | 'date'
+
+export interface Form {
+  id: string
+  title: string
+  description: string | null
+  is_active: boolean
+  created_by: string | null
+  created_at: string
+}
+
+export interface FormField {
+  id: string
+  form_id: string
+  label: string
+  field_type: FormFieldType
+  options: string[] | null
+  is_required: boolean
+  placeholder: string | null
+  display_order: number
+}
+
+export interface FormSubmission {
+  id: string
+  form_id: string
+  user_id: string | null
+  submitted_data: Record<string, string | boolean>
+  created_at: string
+}
+
 export interface SiteSettings {
   id: string
   church_name: string

@@ -14,6 +14,7 @@ const navItems = [
   { href: '/gallery', label: 'Photos' },
   { href: '/videos', label: 'Videos' },
   { href: '/prayer-wall', label: 'Prayer Wall' },
+  { href: '/forms', label: 'Forms' },
 ]
 
 export function Navigation() {

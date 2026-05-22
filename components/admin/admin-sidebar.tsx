@@ -16,6 +16,7 @@ import {
   X,
   LogOut,
   ShieldCheck,
+  ClipboardList,
 } from 'lucide-react'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ const adminNavItems = [
   { href: '/admin/albums', label: 'Photo Albums', icon: Image },
   { href: '/admin/videos', label: 'Videos', icon: Video },
   { href: '/admin/prayers', label: 'Prayer Requests', icon: Heart },
+  { href: '/admin/forms', label: 'Forms', icon: ClipboardList },
   { href: '/admin/users', label: 'Users', icon: Users },
   { href: '/admin/admin-requests', label: 'Admin Requests', icon: ShieldCheck },
   { href: '/admin/settings', label: 'Settings', icon: Settings },

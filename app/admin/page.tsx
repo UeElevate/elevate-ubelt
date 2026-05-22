@@ -1,19 +1,20 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Megaphone, Image, Video, Heart, Users, ShieldCheck } from 'lucide-react'
+import { Megaphone, Image, Video, Heart, Users, ShieldCheck, ClipboardList } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
 
   // Fetch counts
-  const [announcements, albums, videos, prayers, users, adminReqs] = await Promise.all([
+  const [announcements, albums, videos, prayers, users, adminReqs, forms] = await Promise.all([
     supabase.from('announcements').select('id', { count: 'exact', head: true }),
     supabase.from('albums').select('id', { count: 'exact', head: true }),
     supabase.from('videos').select('id', { count: 'exact', head: true }),
     supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('requested_admin', true),
+    supabase.from('forms').select('id', { count: 'exact', head: true }),
   ])
 
   const stats = [
@@ -60,6 +61,13 @@ export default async function AdminDashboard() {
       color: 'bg-amber-50 text-amber-600',
       highlight: (adminReqs.count || 0) > 0,
     },
+    {
+      label: 'Forms',
+      count: forms.count || 0,
+      icon: ClipboardList,
+      href: '/admin/forms',
+      color: 'bg-indigo-50 text-indigo-600',
+    },
   ]
 
   return (
@@ -70,7 +78,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon
           return (
@@ -118,12 +126,19 @@ export default async function AdminDashboard() {
               <Video className="h-5 w-5 text-secondary-foreground" />
               <span>Add New Video</span>
             </Link>
-            <Link 
-              href="/admin/prayers" 
+            <Link
+              href="/admin/prayers"
               className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
             >
               <Heart className="h-5 w-5 text-accent" />
               <span>Manage Prayer Requests</span>
+            </Link>
+            <Link
+              href="/admin/forms"
+              className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted transition-colors"
+            >
+              <ClipboardList className="h-5 w-5 text-indigo-600" />
+              <span>Create New Form</span>
             </Link>
           </CardContent>
         </Card>
