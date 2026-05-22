@@ -1,55 +1,64 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Megaphone, Image, Video, Heart, Users } from 'lucide-react'
+import { Megaphone, Image, Video, Heart, Users, ShieldCheck } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
-  
+
   // Fetch counts
-  const [announcements, albums, videos, prayers, users] = await Promise.all([
+  const [announcements, albums, videos, prayers, users, adminReqs] = await Promise.all([
     supabase.from('announcements').select('id', { count: 'exact', head: true }),
     supabase.from('albums').select('id', { count: 'exact', head: true }),
     supabase.from('videos').select('id', { count: 'exact', head: true }),
     supabase.from('prayer_requests').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
+    supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('requested_admin', true),
   ])
 
   const stats = [
-    { 
-      label: 'Announcements', 
-      count: announcements.count || 0, 
-      icon: Megaphone, 
+    {
+      label: 'Announcements',
+      count: announcements.count || 0,
+      icon: Megaphone,
       href: '/admin/announcements',
       color: 'bg-accent/10 text-accent'
     },
-    { 
-      label: 'Photo Albums', 
-      count: albums.count || 0, 
-      icon: Image, 
+    {
+      label: 'Photo Albums',
+      count: albums.count || 0,
+      icon: Image,
       href: '/admin/albums',
       color: 'bg-primary/10 text-primary'
     },
-    { 
-      label: 'Videos', 
-      count: videos.count || 0, 
-      icon: Video, 
+    {
+      label: 'Videos',
+      count: videos.count || 0,
+      icon: Video,
       href: '/admin/videos',
       color: 'bg-secondary text-secondary-foreground'
     },
-    { 
-      label: 'Prayer Requests', 
-      count: prayers.count || 0, 
-      icon: Heart, 
+    {
+      label: 'Prayer Requests',
+      count: prayers.count || 0,
+      icon: Heart,
       href: '/admin/prayers',
       color: 'bg-accent/10 text-accent'
     },
-    { 
-      label: 'Users', 
-      count: users.count || 0, 
-      icon: Users, 
+    {
+      label: 'Users',
+      count: users.count || 0,
+      icon: Users,
       href: '/admin/users',
       color: 'bg-muted text-muted-foreground'
+    },
+    {
+      label: 'Admin Requests',
+      count: adminReqs.count || 0,
+      icon: ShieldCheck,
+      href: '/admin/admin-requests',
+      color: 'bg-amber-50 text-amber-600',
+      highlight: (adminReqs.count || 0) > 0,
     },
   ]
 
@@ -61,12 +70,12 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon
           return (
             <Link key={stat.label} href={stat.href}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
+              <Card className={`hover:shadow-md transition-shadow cursor-pointer ${(stat as any).highlight ? 'ring-2 ring-amber-400' : ''}`}>
                 <CardContent className="pt-6">
                   <div className={`w-12 h-12 rounded-lg ${stat.color} flex items-center justify-center mb-3`}>
                     <Icon className="h-6 w-6" />

@@ -1,137 +1,121 @@
 import { createClient } from '@/lib/supabase/server'
-import { Card } from '@/components/ui/card'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Video as VideoIcon, Play } from 'lucide-react'
+import { VideoFeatured } from '@/components/video-featured'
+import { Play } from 'lucide-react'
+import Link from 'next/link'
 import type { Video } from '@/lib/types'
 
-function getYouTubeEmbedUrl(url: string): string | null {
-  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/
-  const match = url.match(regExp)
-  return match && match[2].length === 11
-    ? `https://www.youtube.com/embed/${match[2]}`
-    : null
+function getYouTubeId(url: string): string | null {
+  const m = url.match(/^.*(youtu\.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/)
+  return m && m[2].length === 11 ? m[2] : null
 }
 
-function getFacebookEmbedUrl(url: string): string | null {
-  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=560`
+function getCardThumbnail(video: Video): string | null {
+  if (video.thumbnail_url) return video.thumbnail_url
+  if (video.video_type === 'youtube') {
+    const id = getYouTubeId(video.video_url)
+    if (id) return `https://img.youtube.com/vi/${id}/mqdefault.jpg`
+  }
+  return null
 }
 
 function VideoCard({ video }: { video: Video }) {
-  const embedUrl = video.video_type === 'youtube' 
-    ? getYouTubeEmbedUrl(video.video_url)
-    : video.video_type === 'facebook'
-    ? getFacebookEmbedUrl(video.video_url)
-    : null
+  const thumbnail = getCardThumbnail(video)
+  const href = video.video_url
 
   return (
-    <Card className="overflow-hidden">
-      <div className="aspect-video bg-muted relative">
-        {embedUrl ? (
-          <iframe
-            src={embedUrl}
-            title={video.title}
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            className="w-full h-full"
-          />
-        ) : video.thumbnail_url ? (
-          <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="block w-full h-full relative group">
-            <img
-              src={video.thumbnail_url}
-              alt={video.title}
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute inset-0 bg-black/40 flex items-center justify-center group-hover:bg-black/50 transition-colors">
-              <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
-                <Play className="h-8 w-8 text-primary ml-1" fill="currentColor" />
+    <div className="flex flex-col">
+      {/* Thumbnail */}
+      <a href={href} target="_blank" rel="noopener noreferrer" className="block group">
+        <div className="rounded-xl overflow-hidden bg-muted relative" style={{ aspectRatio: '4/3' }}>
+          {thumbnail ? (
+            <>
+              <img
+                src={thumbnail}
+                alt={video.title}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              />
+              <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <div className="w-12 h-12 rounded-full bg-white/90 flex items-center justify-center">
+                  <Play className="h-5 w-5 text-foreground ml-0.5" fill="currentColor" />
+                </div>
               </div>
+            </>
+          ) : (
+            <div
+              className="w-full h-full flex items-center justify-center group-hover:opacity-90 transition-opacity"
+              style={{ background: 'linear-gradient(135deg, #FF6D1B 0%, #0b4ea2 100%)' }}
+            >
+              <Play className="h-10 w-10 text-white/80" fill="currentColor" />
             </div>
-          </a>
-        ) : (
-          <a href={video.video_url} target="_blank" rel="noopener noreferrer" className="w-full h-full flex items-center justify-center group">
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Play className="h-8 w-8 text-primary ml-1" fill="currentColor" />
-              </div>
-              <span className="mt-2 text-sm text-muted-foreground">Click to watch</span>
-            </div>
-          </a>
-        )}
-      </div>
-      <div className="p-4">
-        <h3 className="font-semibold text-foreground line-clamp-2">{video.title}</h3>
+          )}
+        </div>
+      </a>
+
+      {/* Info */}
+      <div className="mt-3">
+        <h3 className="font-bold text-foreground leading-snug line-clamp-2">
+          {video.title}
+        </h3>
         {video.description && (
-          <p className="text-sm text-muted-foreground mt-2 line-clamp-2">{video.description}</p>
+          <p className="text-sm text-muted-foreground mt-1 line-clamp-3 leading-relaxed">
+            {video.description}
+          </p>
         )}
-        <p className="text-xs text-muted-foreground mt-2">
-          {new Date(video.created_at).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </p>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 mt-3 text-sm font-semibold text-foreground hover:text-accent transition-colors"
+        >
+          Watch video
+          <span aria-hidden>→</span>
+        </a>
       </div>
-    </Card>
+    </div>
   )
 }
 
 export default async function VideosPage() {
   const supabase = await createClient()
-  
+
   const { data: videos } = await supabase
     .from('videos')
     .select('*')
     .order('created_at', { ascending: false })
 
-  const eventVideos = videos?.filter(v => v.category === 'event') || []
-  const marketingVideos = videos?.filter(v => v.category === 'marketing') || []
+  const allVideos = (videos ?? []) as Video[]
 
-  const VideoGrid = ({ videos }: { videos: Video[] }) => (
-    videos.length > 0 ? (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {videos.map((video) => (
-          <VideoCard key={video.id} video={video} />
-        ))}
-      </div>
-    ) : (
-      <Card className="p-12 text-center">
-        <VideoIcon className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold text-foreground mb-2">No Videos Yet</h2>
-        <p className="text-muted-foreground">
-          Check back soon for videos from our events and activities.
-        </p>
-      </Card>
-    )
-  )
+  // First 5 go into the featured carousel; all videos show in the grid
+  const featuredVideos = allVideos.slice(0, 5)
 
   return (
-    <div className="p-4 md:p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Videos</h1>
-        <p className="text-muted-foreground">Watch videos from our youth ministry events and more.</p>
-      </div>
+    <div className="min-h-screen bg-white">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
 
-      {/* Videos with Tabs */}
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="mb-6">
-          <TabsTrigger value="all">All Videos</TabsTrigger>
-          <TabsTrigger value="events">Events</TabsTrigger>
-          <TabsTrigger value="marketing">Marketing</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="all">
-          <VideoGrid videos={(videos || []) as Video[]} />
-        </TabsContent>
-        
-        <TabsContent value="events">
-          <VideoGrid videos={eventVideos as Video[]} />
-        </TabsContent>
-        
-        <TabsContent value="marketing">
-          <VideoGrid videos={marketingVideos as Video[]} />
-        </TabsContent>
-      </Tabs>
+        {/* Heading */}
+        <h1 className="text-3xl font-black uppercase tracking-tight text-foreground mb-6">
+          VIDEOS
+        </h1>
+
+        {/* Featured carousel */}
+        {featuredVideos.length > 0 ? (
+          <VideoFeatured videos={featuredVideos} />
+        ) : (
+          <div className="rounded-xl bg-muted flex items-center justify-center text-muted-foreground mb-10" style={{ aspectRatio: '16/9' }}>
+            No videos yet — check back soon!
+          </div>
+        )}
+
+        {/* All videos grid */}
+        {allVideos.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mt-2">
+            {allVideos.map((video) => (
+              <VideoCard key={video.id} video={video} />
+            ))}
+          </div>
+        )}
+
+      </div>
     </div>
   )
 }

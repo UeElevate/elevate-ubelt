@@ -1,10 +1,17 @@
+export type DGroupRole = 'leader' | 'member' | 'none' | 'missionary'
+
 export interface Profile {
   id: string
   full_name: string | null
   email: string | null
+  contact_number: string | null
+  dgroup_role: DGroupRole | null
+  campus: string | null
+  ministry: string | null
   birthday: string | null
   cell_group: string | null
   role: 'user' | 'admin'
+  requested_admin: boolean
   is_active: boolean
   created_at: string
   updated_at: string
@@ -15,7 +22,8 @@ export interface Announcement {
   title: string
   description: string
   content: string | null
-  category: 'event' | 'reminder' | 'worship' | 'general'
+  image_url: string | null
+  category: 'event' | 'reminder' | 'worship' | 'general' | 'calendar'
   is_pinned: boolean
   created_by: string | null
   created_at: string
@@ -51,12 +59,15 @@ export interface Video {
   created_at: string
 }
 
+export type PrayerVisibility = 'everyone' | 'leaders' | 'members' | 'dgroup' | 'missionary'
+
 export interface PrayerRequest {
   id: string
   name: string | null
   request: string
   is_public: boolean
   is_anonymous: boolean
+  visibility: PrayerVisibility
   prayer_count: number
   is_answered: boolean
   admin_reply: string | null

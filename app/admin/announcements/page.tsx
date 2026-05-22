@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Trash2, X } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, ImageIcon } from 'lucide-react'
 import type { Announcement } from '@/lib/types'
 
 export default function AdminAnnouncementsPage() {
@@ -18,12 +18,14 @@ export default function AdminAnnouncementsPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
   const supabase = createClient()
 
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     content: '',
+    image_url: '',
     category: 'general' as Announcement['category'],
     is_pinned: false,
   })
@@ -34,7 +36,6 @@ export default function AdminAnnouncementsPage() {
       .select('*')
       .order('is_pinned', { ascending: false })
       .order('created_at', { ascending: false })
-    
     if (data) setAnnouncements(data as Announcement[])
     setIsLoading(false)
   }, [supabase])
@@ -44,93 +45,87 @@ export default function AdminAnnouncementsPage() {
   }, [fetchAnnouncements])
 
   const resetForm = () => {
-    setFormData({
-      title: '',
-      description: '',
-      content: '',
-      category: 'general',
-      is_pinned: false,
-    })
+    setFormData({ title: '', description: '', content: '', image_url: '', category: 'general', is_pinned: false })
     setEditingId(null)
     setShowForm(false)
   }
 
-  const handleEdit = (announcement: Announcement) => {
+  const handleEdit = (a: Announcement) => {
     setFormData({
-      title: announcement.title,
-      description: announcement.description,
-      content: announcement.content || '',
-      category: announcement.category,
-      is_pinned: announcement.is_pinned,
+      title: a.title,
+      description: a.description,
+      content: a.content || '',
+      image_url: a.image_url || '',
+      category: a.category,
+      is_pinned: a.is_pinned,
     })
-    setEditingId(announcement.id)
+    setEditingId(a.id)
     setShowForm(true)
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImageUploading(true)
+    const ext = file.name.split('.').pop()
+    const path = `announcements/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('media').upload(path, file)
+    if (!error) {
+      const { data } = supabase.storage.from('media').getPublicUrl(path)
+      setFormData(prev => ({ ...prev, image_url: data.publicUrl }))
+    }
+    setImageUploading(false)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
-
     const { data: { user } } = await supabase.auth.getUser()
-
-    if (editingId) {
-      await supabase
-        .from('announcements')
-        .update({
-          title: formData.title,
-          description: formData.description,
-          content: formData.content || null,
-          category: formData.category,
-          is_pinned: formData.is_pinned,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', editingId)
-    } else {
-      await supabase
-        .from('announcements')
-        .insert({
-          title: formData.title,
-          description: formData.description,
-          content: formData.content || null,
-          category: formData.category,
-          is_pinned: formData.is_pinned,
-          created_by: user?.id,
-        })
+    const payload = {
+      title: formData.title,
+      description: formData.description,
+      content: formData.content || null,
+      image_url: formData.image_url || null,
+      category: formData.category,
+      is_pinned: formData.is_pinned,
     }
-
+    if (editingId) {
+      await supabase.from('announcements').update({ ...payload, updated_at: new Date().toISOString() }).eq('id', editingId)
+    } else {
+      await supabase.from('announcements').insert({ ...payload, created_by: user?.id })
+    }
     resetForm()
     fetchAnnouncements()
     setSubmitting(false)
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this announcement?')) return
-    
+    if (!confirm('Delete this announcement?')) return
     await supabase.from('announcements').delete().eq('id', id)
     fetchAnnouncements()
   }
 
-  const categoryColors = {
-    event: 'bg-accent text-accent-foreground',
+  const categoryColors: Record<string, string> = {
+    event:    'bg-accent text-accent-foreground',
     reminder: 'bg-secondary text-secondary-foreground',
-    worship: 'bg-primary text-primary-foreground',
-    general: 'bg-muted text-muted-foreground',
+    worship:  'bg-primary text-primary-foreground',
+    general:  'bg-muted text-muted-foreground',
+    calendar: 'bg-green-100 text-green-800',
   }
 
   return (
-    <div className="pt-14 md:pt-0">
+    <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Announcements</h1>
           <p className="text-muted-foreground">Manage ministry announcements</p>
         </div>
-        <Button onClick={() => setShowForm(!showForm)}>
+        <Button onClick={() => { setShowForm(!showForm); if (showForm) resetForm() }}>
           {showForm ? <X className="mr-2 h-4 w-4" /> : <Plus className="mr-2 h-4 w-4" />}
           {showForm ? 'Cancel' : 'New Announcement'}
         </Button>
       </div>
 
-      {/* Form */}
       {showForm && (
         <Card className="mb-6">
           <CardHeader>
@@ -152,16 +147,15 @@ export default function AdminAnnouncementsPage() {
                   <Label htmlFor="category">Category *</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) => setFormData(prev => ({ ...prev, category: value as Announcement['category'] }))}
+                    onValueChange={(v) => setFormData(prev => ({ ...prev, category: v as Announcement['category'] }))}
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="event">Event</SelectItem>
                       <SelectItem value="reminder">Reminder</SelectItem>
                       <SelectItem value="worship">Worship</SelectItem>
                       <SelectItem value="general">General</SelectItem>
+                      <SelectItem value="calendar">Calendar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -188,31 +182,66 @@ export default function AdminAnnouncementsPage() {
                 />
               </div>
 
+              {/* Image Upload */}
+              <div className="space-y-2">
+                <Label>Cover Image (optional)</Label>
+                <div className="flex items-start gap-4">
+                  <div className="flex-1">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={imageUploading}
+                      className="cursor-pointer"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">Or paste an image URL below</p>
+                    <Input
+                      placeholder="https://..."
+                      value={formData.image_url}
+                      onChange={(e) => setFormData(prev => ({ ...prev, image_url: e.target.value }))}
+                      className="mt-2"
+                    />
+                  </div>
+                  {formData.image_url ? (
+                    <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border shrink-0">
+                      <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, image_url: '' }))}
+                        className="absolute top-1 right-1 p-0.5 bg-black/60 rounded-full text-white hover:bg-black/80"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-lg border border-dashed border-border flex items-center justify-center shrink-0 text-muted-foreground">
+                      <ImageIcon className="h-6 w-6" />
+                    </div>
+                  )}
+                </div>
+                {imageUploading && <p className="text-sm text-muted-foreground">Uploading image...</p>}
+              </div>
+
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="pinned"
                   checked={formData.is_pinned}
-                  onCheckedChange={(checked) => 
-                    setFormData(prev => ({ ...prev, is_pinned: checked as boolean }))
-                  }
+                  onCheckedChange={(checked) => setFormData(prev => ({ ...prev, is_pinned: checked as boolean }))}
                 />
                 <Label htmlFor="pinned" className="cursor-pointer">Pin this announcement</Label>
               </div>
 
               <div className="flex gap-2">
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" disabled={submitting || imageUploading}>
                   {submitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
                 </Button>
-                <Button type="button" variant="outline" onClick={resetForm}>
-                  Cancel
-                </Button>
+                <Button type="button" variant="outline" onClick={resetForm}>Cancel</Button>
               </div>
             </form>
           </CardContent>
         </Card>
       )}
 
-      {/* List */}
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -226,32 +255,35 @@ export default function AdminAnnouncementsPage() {
         </div>
       ) : announcements.length > 0 ? (
         <div className="space-y-4">
-          {announcements.map((announcement) => (
-            <Card key={announcement.id}>
+          {announcements.map((a) => (
+            <Card key={a.id}>
               <CardContent className="pt-6">
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                  <div className="flex-1">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${categoryColors[announcement.category]}`}>
-                        {announcement.category}
-                      </span>
-                      {announcement.is_pinned && (
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-accent text-accent-foreground">
-                          Pinned
+                  <div className="flex items-start gap-4 flex-1 min-w-0">
+                    {a.image_url && (
+                      <img src={a.image_url} alt={a.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${categoryColors[a.category]}`}>
+                          {a.category}
                         </span>
-                      )}
+                        {a.is_pinned && (
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-accent text-accent-foreground">
+                            Pinned
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold text-foreground truncate">{a.title}</h3>
+                      <p className="text-sm text-muted-foreground line-clamp-1">{a.description}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{new Date(a.created_at).toLocaleDateString()}</p>
                     </div>
-                    <h3 className="font-semibold text-lg text-foreground">{announcement.title}</h3>
-                    <p className="text-muted-foreground text-sm">{announcement.description}</p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      {new Date(announcement.created_at).toLocaleDateString()}
-                    </p>
                   </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleEdit(announcement)}>
+                  <div className="flex gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(a)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
-                    <Button variant="outline" size="sm" onClick={() => handleDelete(announcement.id)}>
+                    <Button variant="outline" size="sm" onClick={() => handleDelete(a.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>

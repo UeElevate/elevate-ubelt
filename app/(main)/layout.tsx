@@ -1,4 +1,5 @@
 import { Navigation } from '@/components/navigation'
+import { Footer } from '@/components/footer'
 import { SplashScreen } from '@/components/splash-screen'
 
 export default function MainLayout({
@@ -10,9 +11,10 @@ export default function MainLayout({
     <>
       <SplashScreen />
       <Navigation />
-      <main className="min-h-screen pt-14 pb-20 md:pt-0 md:pb-0 md:ml-64">
+      <main className="min-h-screen pt-16">
         {children}
       </main>
+      <Footer />
     </>
   )
 }

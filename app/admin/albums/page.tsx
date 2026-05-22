@@ -18,9 +18,22 @@ export default function AdminAlbumsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null)
-  const [newPhotoUrl, setNewPhotoUrl] = useState('')
   const [newPhotoCaption, setNewPhotoCaption] = useState('')
+  const [urlInput, setUrlInput] = useState('')
+  const [urlError, setUrlError] = useState('')
+  const [uploading, setUploading] = useState(false)
+  const [addingUrl, setAddingUrl] = useState(false)
   const supabase = createClient()
+
+  const convertGoogleDriveUrl = (url: string): string => {
+    // Convert sharing link: https://drive.google.com/file/d/FILE_ID/view...
+    const fileMatch = url.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/)
+    if (fileMatch) return `https://drive.google.com/uc?export=view&id=${fileMatch[1]}`
+    // Already a direct link with id=
+    const idMatch = url.match(/[?&]id=([a-zA-Z0-9_-]+)/)
+    if (idMatch) return `https://drive.google.com/uc?export=view&id=${idMatch[1]}`
+    return url
+  }
 
   const [formData, setFormData] = useState({
     name: '',
@@ -93,25 +106,68 @@ export default function AdminAlbumsPage() {
     fetchAlbums()
   }
 
-  const handleAddPhoto = async () => {
-    if (!selectedAlbum || !newPhotoUrl.trim()) return
-
+  const handleAddUrl = async () => {
+    if (!selectedAlbum || !urlInput.trim()) return
+    setUrlError('')
+    setAddingUrl(true)
+    const finalUrl = convertGoogleDriveUrl(urlInput.trim())
     const maxOrder = selectedAlbum.photos?.reduce((max, p) => Math.max(max, p.display_order), -1) ?? -1
-
-    await supabase.from('photos').insert({
+    const { error } = await supabase.from('photos').insert({
       album_id: selectedAlbum.id,
-      url: newPhotoUrl.trim(),
+      url: finalUrl,
       caption: newPhotoCaption.trim() || null,
       display_order: maxOrder + 1,
     })
-
-    setNewPhotoUrl('')
+    if (error) { setUrlError('Failed to add photo. Check the URL.'); setAddingUrl(false); return }
+    setUrlInput('')
     setNewPhotoCaption('')
+    const { data: refreshed } = await supabase.from('albums').select('*, photos(*)').eq('id', selectedAlbum.id).single()
+    if (refreshed) {
+      refreshed.photos = refreshed.photos?.sort((a: Photo, b: Photo) => a.display_order - b.display_order)
+      setSelectedAlbum(refreshed as Album)
+    }
     fetchAlbums()
-    
-    // Update selected album
-    const updated = albums.find(a => a.id === selectedAlbum.id)
-    if (updated) setSelectedAlbum(updated)
+    setAddingUrl(false)
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!selectedAlbum) return
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    setUploading(true)
+    const maxOrder = selectedAlbum.photos?.reduce((max, p) => Math.max(max, p.display_order), -1) ?? -1
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      const ext = file.name.split('.').pop()
+      const path = `albums/${selectedAlbum.id}/${Date.now()}-${i}.${ext}`
+      const { error: uploadError } = await supabase.storage.from('media').upload(path, file)
+      if (!uploadError) {
+        const { data } = supabase.storage.from('media').getPublicUrl(path)
+        await supabase.from('photos').insert({
+          album_id: selectedAlbum.id,
+          url: data.publicUrl,
+          caption: files.length === 1 ? newPhotoCaption.trim() || null : null,
+          display_order: maxOrder + 1 + i,
+        })
+      }
+    }
+
+    setNewPhotoCaption('')
+    e.target.value = ''
+    // Refetch and refresh selected album
+    const { data: refreshed } = await supabase
+      .from('albums')
+      .select('*, photos(*)')
+      .eq('id', selectedAlbum.id)
+      .single()
+    if (refreshed) {
+      refreshed.photos = refreshed.photos?.sort((a: Photo, b: Photo) => a.display_order - b.display_order)
+      setSelectedAlbum(refreshed as Album)
+    }
+    fetchAlbums()
+    setUploading(false)
   }
 
   const handleDeletePhoto = async (photoId: string) => {
@@ -204,23 +260,63 @@ export default function AdminAlbumsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Add Photo */}
-            <div className="flex flex-col sm:flex-row gap-2">
+            {/* Upload Photos */}
+            <div className="rounded-xl border-2 border-dashed border-border p-6 text-center">
+              <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+              <p className="text-sm font-semibold text-foreground mb-1">Upload Photos</p>
+              <p className="text-xs text-muted-foreground mb-3">You can select multiple photos at once</p>
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileUpload}
+                  disabled={uploading}
+                />
+                <span className={`inline-flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  uploading
+                    ? 'bg-muted text-muted-foreground cursor-not-allowed'
+                    : 'bg-foreground text-white hover:bg-foreground/90 cursor-pointer'
+                }`}>
+                  <Upload className="h-4 w-4" />
+                  {uploading ? 'Uploading...' : 'Choose Photos'}
+                </span>
+              </label>
+              {uploading && (
+                <p className="text-xs text-muted-foreground mt-2 animate-pulse">Uploading to storage...</p>
+              )}
+            </div>
+
+            {/* OR — URL / Google Drive */}
+            <div className="relative flex items-center gap-3">
+              <div className="flex-1 h-px bg-border" />
+              <span className="text-xs text-muted-foreground font-medium">OR add from URL</span>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+
+            <div className="space-y-2">
               <Input
-                placeholder="Image URL"
-                value={newPhotoUrl}
-                onChange={(e) => setNewPhotoUrl(e.target.value)}
-                className="flex-1"
+                placeholder="Paste image URL or Google Drive share link..."
+                value={urlInput}
+                onChange={e => { setUrlInput(e.target.value); setUrlError('') }}
               />
               <Input
                 placeholder="Caption (optional)"
                 value={newPhotoCaption}
-                onChange={(e) => setNewPhotoCaption(e.target.value)}
-                className="flex-1"
+                onChange={e => setNewPhotoCaption(e.target.value)}
               />
-              <Button onClick={handleAddPhoto} disabled={!newPhotoUrl.trim()}>
-                <Upload className="mr-2 h-4 w-4" />
-                Add
+              {urlError && <p className="text-xs text-destructive">{urlError}</p>}
+              <p className="text-xs text-muted-foreground">
+                Google Drive: right-click the file → <strong>Share</strong> → set to <strong>"Anyone with the link"</strong> → copy link and paste here.
+              </p>
+              <Button
+                onClick={handleAddUrl}
+                disabled={!urlInput.trim() || addingUrl}
+                variant="outline"
+                className="w-full"
+              >
+                {addingUrl ? 'Adding...' : 'Add Photo from URL'}
               </Button>
             </div>
 
