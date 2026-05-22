@@ -75,6 +75,14 @@ export interface PrayerRequest {
   created_at: string
 }
 
+export interface EventAttendance {
+  id: string
+  announcement_id: string
+  user_id: string
+  status: 'going' | 'cant_go'
+  created_at: string
+}
+
 export type FormFieldType = 'text' | 'textarea' | 'email' | 'number' | 'select' | 'radio' | 'checkbox' | 'date'
 
 export interface Form {

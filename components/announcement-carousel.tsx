@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { ChevronLeft, ChevronRight, Pin } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { AttendanceButtons } from '@/components/attendance-buttons'
 import type { Announcement } from '@/lib/types'
 
 const categoryLabel: Record<string, string> = {
@@ -112,6 +113,13 @@ export function AnnouncementCarousel({
           <p className="mt-2 text-muted-foreground leading-relaxed text-sm">
             {a.description}
           </p>
+
+          {/* Attendance RSVP — events only */}
+          {a.category === 'event' && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <AttendanceButtons announcementId={a.id} compact />
+            </div>
+          )}
 
           <div className="flex items-center justify-between mt-4">
             <span className="text-xs text-muted-foreground">

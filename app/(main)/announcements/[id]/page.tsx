@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Calendar, Pin } from 'lucide-react'
+import { AttendanceButtons } from '@/components/attendance-buttons'
 import type { Announcement } from '@/lib/types'
 
 const categoryColors: Record<string, string> = {
@@ -96,6 +97,16 @@ export default async function AnnouncementDetailPage({
           <p className="text-[15px] text-muted-foreground leading-relaxed">
             {announcement.description}
           </p>
+        )}
+
+        {/* Attendance — only shown for event category */}
+        {announcement.category === 'event' && (
+          <div className="mt-10 pt-8 border-t border-border">
+            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-5">
+              Attendance
+            </h3>
+            <AttendanceButtons announcementId={announcement.id} />
+          </div>
         )}
 
       </div>

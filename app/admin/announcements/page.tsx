@@ -9,8 +9,16 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Trash2, X, ImageIcon } from 'lucide-react'
+import { Plus, Pencil, Trash2, X, ImageIcon, Users } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Check } from 'lucide-react'
 import type { Announcement } from '@/lib/types'
+
+interface AttendeeProfile {
+  id: string
+  full_name: string | null
+  email: string | null
+}
 
 export default function AdminAnnouncementsPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -19,6 +27,11 @@ export default function AdminAnnouncementsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [imageUploading, setImageUploading] = useState(false)
+  const [attendanceDialog, setAttendanceDialog] = useState<Announcement | null>(null)
+  const [attendanceGoing, setAttendanceGoing] = useState<AttendeeProfile[]>([])
+  const [attendanceCantGo, setAttendanceCantGo] = useState<AttendeeProfile[]>([])
+  const [loadingAttendance, setLoadingAttendance] = useState(false)
+  const [attendanceTab, setAttendanceTab] = useState<'going' | 'cant_go'>('going')
   const supabase = createClient()
 
   const [formData, setFormData] = useState({
@@ -103,6 +116,40 @@ export default function AdminAnnouncementsPage() {
     if (!confirm('Delete this announcement?')) return
     await supabase.from('announcements').delete().eq('id', id)
     fetchAnnouncements()
+  }
+
+  const openAttendance = async (a: Announcement) => {
+    setAttendanceDialog(a)
+    setAttendanceTab('going')
+    setLoadingAttendance(true)
+    const { data: records } = await supabase
+      .from('event_attendance')
+      .select('user_id, status')
+      .eq('announcement_id', a.id)
+    if (records && records.length > 0) {
+      const userIds = records.map(r => r.user_id)
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email')
+        .in('id', userIds)
+      const profileMap = Object.fromEntries(
+        (profiles ?? []).map((p: AttendeeProfile) => [p.id, p])
+      )
+      setAttendanceGoing(
+        records
+          .filter(r => r.status === 'going')
+          .map(r => profileMap[r.user_id] ?? { id: r.user_id, full_name: 'Unknown', email: null })
+      )
+      setAttendanceCantGo(
+        records
+          .filter(r => r.status === 'cant_go')
+          .map(r => profileMap[r.user_id] ?? { id: r.user_id, full_name: 'Unknown', email: null })
+      )
+    } else {
+      setAttendanceGoing([])
+      setAttendanceCantGo([])
+    }
+    setLoadingAttendance(false)
   }
 
   const categoryColors: Record<string, string> = {
@@ -280,6 +327,12 @@ export default function AdminAnnouncementsPage() {
                     </div>
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    {a.category === 'event' && (
+                      <Button variant="outline" size="sm" onClick={() => openAttendance(a)}>
+                        <Users className="h-4 w-4 mr-1.5" />
+                        Attendance
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" onClick={() => handleEdit(a)}>
                       <Pencil className="h-4 w-4" />
                     </Button>
@@ -297,6 +350,104 @@ export default function AdminAnnouncementsPage() {
           <p className="text-muted-foreground">No announcements yet. Create your first one!</p>
         </Card>
       )}
+
+      {/* Attendance Dialog */}
+      <Dialog open={!!attendanceDialog} onOpenChange={open => { if (!open) setAttendanceDialog(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="pr-6">{attendanceDialog?.title} — Attendance</DialogTitle>
+          </DialogHeader>
+
+          {loadingAttendance ? (
+            <div className="py-8 text-center text-muted-foreground">Loading attendance...</div>
+          ) : (
+            <div className="space-y-4">
+              {/* Summary */}
+              <div className="flex items-center gap-6 p-4 bg-muted/40 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
+                    <Check className="h-4 w-4 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-foreground">{attendanceGoing.length}</p>
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Going</p>
+                  </div>
+                </div>
+                <div className="w-px h-10 bg-border" />
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                    <X className="h-4 w-4 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-black text-foreground">{attendanceCantGo.length}</p>
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Can&apos;t Go</p>
+                  </div>
+                </div>
+                <div className="w-px h-10 bg-border" />
+                <div>
+                  <p className="text-2xl font-black text-foreground">
+                    {attendanceGoing.length + attendanceCantGo.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Total</p>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-1 bg-muted rounded-lg p-1">
+                <button
+                  onClick={() => setAttendanceTab('going')}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                    attendanceTab === 'going'
+                      ? 'bg-white text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Going ({attendanceGoing.length})
+                </button>
+                <button
+                  onClick={() => setAttendanceTab('cant_go')}
+                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                    attendanceTab === 'cant_go'
+                      ? 'bg-white text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Can&apos;t Go ({attendanceCantGo.length})
+                </button>
+              </div>
+
+              {/* Attendee list */}
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {(attendanceTab === 'going' ? attendanceGoing : attendanceCantGo).length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">
+                    No responses yet.
+                  </p>
+                ) : (
+                  (attendanceTab === 'going' ? attendanceGoing : attendanceCantGo).map((person, i) => (
+                    <div key={person.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${
+                        attendanceTab === 'going'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-red-100 text-red-600'
+                      }`}>
+                        {(person.full_name ?? 'U')[0].toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {person.full_name ?? 'Unknown User'}
+                        </p>
+                        {person.email && (
+                          <p className="text-xs text-muted-foreground truncate">{person.email}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
