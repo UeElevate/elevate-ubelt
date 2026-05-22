@@ -66,6 +66,7 @@ export default function AdminAnnouncementsPage() {
   const [attendanceTab, setAttendanceTab] = useState<AttendanceTab>('going')
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [walkins, setWalkins] = useState<WalkinRecord[]>([])
+  const [attendanceSearch, setAttendanceSearch] = useState('')
 
   // Walk-in form
   const [walkinName, setWalkinName] = useState('')
@@ -152,6 +153,7 @@ export default function AdminAnnouncementsPage() {
   const openAttendance = async (a: Announcement) => {
     setAttendanceDialog(a)
     setAttendanceTab('going')
+    setAttendanceSearch('')
     setLoadingAttendance(true)
     setWalkinName('')
     setWalkinNotes('')
@@ -269,12 +271,23 @@ export default function AdminAnnouncementsPage() {
     URL.revokeObjectURL(url)
   }
 
-  // ── Derived counts ────────────────────────────────────────────────────────────
+  // ── Derived counts & filtered lists ──────────────────────────────────────────
 
+  const q = attendanceSearch.toLowerCase().trim()
   const goingRecords = attendanceRecords.filter(r => r.status === 'going')
   const cantGoRecords = attendanceRecords.filter(r => r.status === 'cant_go')
   const confirmedCount = attendanceRecords.filter(r => r.attended).length
   const totalPresent = confirmedCount + walkins.length
+
+  const filteredGoing = q
+    ? goingRecords.filter(r => (r.full_name ?? '').toLowerCase().includes(q) || (r.email ?? '').toLowerCase().includes(q))
+    : goingRecords
+  const filteredCantGo = q
+    ? cantGoRecords.filter(r => (r.full_name ?? '').toLowerCase().includes(q) || (r.email ?? '').toLowerCase().includes(q))
+    : cantGoRecords
+  const filteredWalkins = q
+    ? walkins.filter(w => w.name.toLowerCase().includes(q) || (w.notes ?? '').toLowerCase().includes(q))
+    : walkins
 
   // ── Styles ───────────────────────────────────────────────────────────────────
 
@@ -518,8 +531,21 @@ export default function AdminAnnouncementsPage() {
                 <span className="text-xl font-black">{totalPresent}</span>
               </div>
 
+              {/* Search */}
+              <div className="mx-6 mt-4 relative">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z" />
+                </svg>
+                <Input
+                  value={attendanceSearch}
+                  onChange={e => setAttendanceSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="pl-9"
+                />
+              </div>
+
               {/* Tabs */}
-              <div className="flex gap-1 bg-muted rounded-lg p-1 mx-6 mt-4">
+              <div className="flex gap-1 bg-muted rounded-lg p-1 mx-6 mt-3">
                 {([
                   { key: 'going', label: `Going (${goingRecords.length})` },
                   { key: 'cant_go', label: `Can't Go (${cantGoRecords.length})` },
@@ -544,12 +570,12 @@ export default function AdminAnnouncementsPage() {
 
                 {/* ── Going tab ── */}
                 {attendanceTab === 'going' && (
-                  goingRecords.length === 0 ? (
+                  filteredGoing.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-10">
-                      No one has RSVPed as going yet.
+                      {q ? `No results for "${attendanceSearch}".` : 'No one has RSVPed as going yet.'}
                     </p>
                   ) : (
-                    goingRecords.map(record => (
+                    filteredGoing.map(record => (
                       <div
                         key={record.id}
                         className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
@@ -594,12 +620,12 @@ export default function AdminAnnouncementsPage() {
 
                 {/* ── Can't Go tab ── */}
                 {attendanceTab === 'cant_go' && (
-                  cantGoRecords.length === 0 ? (
+                  filteredCantGo.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-10">
-                      No one has marked Can&apos;t Go yet.
+                      {q ? `No results for "${attendanceSearch}".` : 'No one has marked Can\'t Go yet.'}
                     </p>
                   ) : (
-                    cantGoRecords.map(record => (
+                    filteredCantGo.map(record => (
                       <div key={record.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors">
                         <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-sm font-bold">
                           {(record.full_name ?? 'U')[0].toUpperCase()}
@@ -660,12 +686,12 @@ export default function AdminAnnouncementsPage() {
                     </div>
 
                     {/* Walk-in list */}
-                    {walkins.length === 0 ? (
+                    {filteredWalkins.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-6">
-                        No walk-ins added yet.
+                        {q ? `No results for "${attendanceSearch}".` : 'No walk-ins added yet.'}
                       </p>
                     ) : (
-                      walkins.map((w, i) => (
+                      filteredWalkins.map((w, i) => (
                         <div
                           key={w.id}
                           className="flex items-center justify-between p-3 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100/60 transition-colors"
