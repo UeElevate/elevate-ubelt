@@ -9,30 +9,47 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Plus, Pencil, Trash2, X, ImageIcon, Users } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Check } from 'lucide-react'
+import {
+  Plus, Pencil, Trash2, X, ImageIcon, Users,
+  Check, UserPlus, Download, CheckCircle2, Circle,
+} from 'lucide-react'
 import type { Announcement } from '@/lib/types'
 
-interface AttendeeProfile {
+// ── Local types ───────────────────────────────────────────────────────────────
+
+interface AttendanceRecord {
   id: string
+  user_id: string
+  status: 'going' | 'cant_go'
+  attended: boolean
   full_name: string | null
   email: string | null
+  created_at: string
 }
 
+interface WalkinRecord {
+  id: string
+  announcement_id: string
+  name: string
+  notes: string | null
+  created_at: string
+}
+
+type AttendanceTab = 'going' | 'cant_go' | 'walkins'
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
 export default function AdminAnnouncementsPage() {
+  const supabase = createClient()
+
+  // Announcements list
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [imageUploading, setImageUploading] = useState(false)
-  const [attendanceDialog, setAttendanceDialog] = useState<Announcement | null>(null)
-  const [attendanceGoing, setAttendanceGoing] = useState<AttendeeProfile[]>([])
-  const [attendanceCantGo, setAttendanceCantGo] = useState<AttendeeProfile[]>([])
-  const [loadingAttendance, setLoadingAttendance] = useState(false)
-  const [attendanceTab, setAttendanceTab] = useState<'going' | 'cant_go'>('going')
-  const supabase = createClient()
 
   const [formData, setFormData] = useState({
     title: '',
@@ -42,6 +59,20 @@ export default function AdminAnnouncementsPage() {
     category: 'general' as Announcement['category'],
     is_pinned: false,
   })
+
+  // Attendance dialog
+  const [attendanceDialog, setAttendanceDialog] = useState<Announcement | null>(null)
+  const [loadingAttendance, setLoadingAttendance] = useState(false)
+  const [attendanceTab, setAttendanceTab] = useState<AttendanceTab>('going')
+  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
+  const [walkins, setWalkins] = useState<WalkinRecord[]>([])
+
+  // Walk-in form
+  const [walkinName, setWalkinName] = useState('')
+  const [walkinNotes, setWalkinNotes] = useState('')
+  const [addingWalkin, setAddingWalkin] = useState(false)
+
+  // ── Announcement CRUD ────────────────────────────────────────────────────────
 
   const fetchAnnouncements = useCallback(async () => {
     const { data } = await supabase
@@ -53,9 +84,7 @@ export default function AdminAnnouncementsPage() {
     setIsLoading(false)
   }, [supabase])
 
-  useEffect(() => {
-    fetchAnnouncements()
-  }, [fetchAnnouncements])
+  useEffect(() => { fetchAnnouncements() }, [fetchAnnouncements])
 
   const resetForm = () => {
     setFormData({ title: '', description: '', content: '', image_url: '', category: 'general', is_pinned: false })
@@ -118,39 +147,136 @@ export default function AdminAnnouncementsPage() {
     fetchAnnouncements()
   }
 
+  // ── Attendance ───────────────────────────────────────────────────────────────
+
   const openAttendance = async (a: Announcement) => {
     setAttendanceDialog(a)
     setAttendanceTab('going')
     setLoadingAttendance(true)
-    const { data: records } = await supabase
-      .from('event_attendance')
-      .select('user_id, status')
-      .eq('announcement_id', a.id)
+    setWalkinName('')
+    setWalkinNotes('')
+
+    const [{ data: records }, { data: walkinsData }] = await Promise.all([
+      supabase
+        .from('event_attendance')
+        .select('id, user_id, status, attended, created_at')
+        .eq('announcement_id', a.id),
+      supabase
+        .from('event_walkins')
+        .select('*')
+        .eq('announcement_id', a.id)
+        .order('created_at', { ascending: true }),
+    ])
+
     if (records && records.length > 0) {
-      const userIds = records.map(r => r.user_id)
+      const userIds = records.map((r: any) => r.user_id)
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, full_name, email')
         .in('id', userIds)
       const profileMap = Object.fromEntries(
-        (profiles ?? []).map((p: AttendeeProfile) => [p.id, p])
+        (profiles ?? []).map((p: any) => [p.id, p])
       )
-      setAttendanceGoing(
-        records
-          .filter(r => r.status === 'going')
-          .map(r => profileMap[r.user_id] ?? { id: r.user_id, full_name: 'Unknown', email: null })
-      )
-      setAttendanceCantGo(
-        records
-          .filter(r => r.status === 'cant_go')
-          .map(r => profileMap[r.user_id] ?? { id: r.user_id, full_name: 'Unknown', email: null })
+      setAttendanceRecords(
+        records.map((r: any) => ({
+          id: r.id,
+          user_id: r.user_id,
+          status: r.status,
+          attended: r.attended ?? false,
+          full_name: profileMap[r.user_id]?.full_name ?? 'Unknown',
+          email: profileMap[r.user_id]?.email ?? null,
+          created_at: r.created_at,
+        }))
       )
     } else {
-      setAttendanceGoing([])
-      setAttendanceCantGo([])
+      setAttendanceRecords([])
     }
+
+    setWalkins((walkinsData ?? []) as WalkinRecord[])
     setLoadingAttendance(false)
   }
+
+  const toggleConfirmed = async (recordId: string, current: boolean) => {
+    await supabase
+      .from('event_attendance')
+      .update({ attended: !current })
+      .eq('id', recordId)
+    setAttendanceRecords(prev =>
+      prev.map(r => r.id === recordId ? { ...r, attended: !current } : r)
+    )
+  }
+
+  const addWalkin = async () => {
+    if (!walkinName.trim() || !attendanceDialog) return
+    setAddingWalkin(true)
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data } = await supabase
+      .from('event_walkins')
+      .insert({
+        announcement_id: attendanceDialog.id,
+        name: walkinName.trim(),
+        notes: walkinNotes.trim() || null,
+        added_by: user?.id ?? null,
+      })
+      .select()
+      .single()
+    if (data) setWalkins(prev => [...prev, data as WalkinRecord])
+    setWalkinName('')
+    setWalkinNotes('')
+    setAddingWalkin(false)
+  }
+
+  const deleteWalkin = async (id: string) => {
+    if (!confirm('Remove this walk-in entry?')) return
+    await supabase.from('event_walkins').delete().eq('id', id)
+    setWalkins(prev => prev.filter(w => w.id !== id))
+  }
+
+  const exportToCSV = () => {
+    if (!attendanceDialog) return
+    const rows: string[][] = [
+      ['Name', 'Email', 'Type', 'RSVP Status', 'Confirmed Present', 'Date'],
+    ]
+    for (const r of attendanceRecords) {
+      rows.push([
+        r.full_name ?? 'Unknown',
+        r.email ?? '',
+        'Online RSVP',
+        r.status === 'going' ? 'Going' : "Can't Go",
+        r.attended ? 'Yes' : 'No',
+        new Date(r.created_at).toLocaleDateString(),
+      ])
+    }
+    for (const w of walkins) {
+      rows.push([
+        w.name,
+        '',
+        'Walk-in',
+        'N/A',
+        'Yes',
+        new Date(w.created_at).toLocaleDateString(),
+      ])
+    }
+    const csv = rows
+      .map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${attendanceDialog.title.replace(/[^a-z0-9]/gi, '_')}_attendance.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ── Derived counts ────────────────────────────────────────────────────────────
+
+  const goingRecords = attendanceRecords.filter(r => r.status === 'going')
+  const cantGoRecords = attendanceRecords.filter(r => r.status === 'cant_go')
+  const confirmedCount = attendanceRecords.filter(r => r.attended).length
+  const totalPresent = confirmedCount + walkins.length
+
+  // ── Styles ───────────────────────────────────────────────────────────────────
 
   const categoryColors: Record<string, string> = {
     event:    'bg-accent text-accent-foreground',
@@ -160,8 +286,11 @@ export default function AdminAnnouncementsPage() {
     calendar: 'bg-green-100 text-green-800',
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────────
+
   return (
     <div>
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Announcements</h1>
@@ -173,6 +302,7 @@ export default function AdminAnnouncementsPage() {
         </Button>
       </div>
 
+      {/* Announcement form */}
       {showForm && (
         <Card className="mb-6">
           <CardHeader>
@@ -207,7 +337,6 @@ export default function AdminAnnouncementsPage() {
                   </Select>
                 </div>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="description">Short Description *</Label>
                 <Textarea
@@ -218,7 +347,6 @@ export default function AdminAnnouncementsPage() {
                   required
                 />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="content">Full Content (optional)</Label>
                 <Textarea
@@ -228,8 +356,6 @@ export default function AdminAnnouncementsPage() {
                   rows={4}
                 />
               </div>
-
-              {/* Image Upload */}
               <div className="space-y-2">
                 <Label>Cover Image (optional)</Label>
                 <div className="flex items-start gap-4">
@@ -268,7 +394,6 @@ export default function AdminAnnouncementsPage() {
                 </div>
                 {imageUploading && <p className="text-sm text-muted-foreground">Uploading image...</p>}
               </div>
-
               <div className="flex items-center space-x-2">
                 <Checkbox
                   id="pinned"
@@ -277,7 +402,6 @@ export default function AdminAnnouncementsPage() {
                 />
                 <Label htmlFor="pinned" className="cursor-pointer">Pin this announcement</Label>
               </div>
-
               <div className="flex gap-2">
                 <Button type="submit" disabled={submitting || imageUploading}>
                   {submitting ? 'Saving...' : editingId ? 'Update' : 'Create'}
@@ -289,6 +413,7 @@ export default function AdminAnnouncementsPage() {
         </Card>
       )}
 
+      {/* Announcements list */}
       {isLoading ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
@@ -351,101 +476,249 @@ export default function AdminAnnouncementsPage() {
         </Card>
       )}
 
-      {/* Attendance Dialog */}
+      {/* ── Attendance Dialog ─────────────────────────────────────────────── */}
       <Dialog open={!!attendanceDialog} onOpenChange={open => { if (!open) setAttendanceDialog(null) }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="pr-6">{attendanceDialog?.title} — Attendance</DialogTitle>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0">
+          {/* Dialog header */}
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+            <DialogTitle className="text-lg font-bold pr-6 leading-snug">
+              {attendanceDialog?.title}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground font-semibold uppercase tracking-widest">
+              Attendance Management
+            </p>
           </DialogHeader>
 
           {loadingAttendance ? (
-            <div className="py-8 text-center text-muted-foreground">Loading attendance...</div>
+            <div className="flex-1 py-12 text-center text-muted-foreground">
+              Loading attendance data...
+            </div>
           ) : (
-            <div className="space-y-4">
-              {/* Summary */}
-              <div className="flex items-center gap-6 p-4 bg-muted/40 rounded-xl">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center">
-                    <Check className="h-4 w-4 text-green-600" />
+            <div className="flex-1 overflow-y-auto">
+              {/* Summary stats */}
+              <div className="grid grid-cols-4 gap-px bg-border mx-6 mt-5 rounded-xl overflow-hidden border border-border">
+                {[
+                  { label: 'Going', value: goingRecords.length, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: "Can't Go", value: cantGoRecords.length, color: 'text-red-500', bg: 'bg-red-50' },
+                  { label: 'Confirmed', value: confirmedCount, color: 'text-green-600', bg: 'bg-green-50' },
+                  { label: 'Walk-ins', value: walkins.length, color: 'text-purple-600', bg: 'bg-purple-50' },
+                ].map(stat => (
+                  <div key={stat.label} className={`${stat.bg} px-3 py-3 text-center`}>
+                    <p className={`text-2xl font-black ${stat.color}`}>{stat.value}</p>
+                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide mt-0.5">
+                      {stat.label}
+                    </p>
                   </div>
-                  <div>
-                    <p className="text-2xl font-black text-foreground">{attendanceGoing.length}</p>
-                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Going</p>
-                  </div>
-                </div>
-                <div className="w-px h-10 bg-border" />
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
-                    <X className="h-4 w-4 text-red-500" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-black text-foreground">{attendanceCantGo.length}</p>
-                    <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Can&apos;t Go</p>
-                  </div>
-                </div>
-                <div className="w-px h-10 bg-border" />
-                <div>
-                  <p className="text-2xl font-black text-foreground">
-                    {attendanceGoing.length + attendanceCantGo.length}
-                  </p>
-                  <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Total</p>
-                </div>
+                ))}
+              </div>
+
+              {/* Total present callout */}
+              <div className="mx-6 mt-3 flex items-center justify-between px-4 py-2.5 bg-foreground text-background rounded-lg">
+                <span className="text-sm font-bold">Total Present (Confirmed + Walk-ins)</span>
+                <span className="text-xl font-black">{totalPresent}</span>
               </div>
 
               {/* Tabs */}
-              <div className="flex gap-1 bg-muted rounded-lg p-1">
-                <button
-                  onClick={() => setAttendanceTab('going')}
-                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                    attendanceTab === 'going'
-                      ? 'bg-white text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Going ({attendanceGoing.length})
-                </button>
-                <button
-                  onClick={() => setAttendanceTab('cant_go')}
-                  className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors ${
-                    attendanceTab === 'cant_go'
-                      ? 'bg-white text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  Can&apos;t Go ({attendanceCantGo.length})
-                </button>
+              <div className="flex gap-1 bg-muted rounded-lg p-1 mx-6 mt-4">
+                {([
+                  { key: 'going', label: `Going (${goingRecords.length})` },
+                  { key: 'cant_go', label: `Can't Go (${cantGoRecords.length})` },
+                  { key: 'walkins', label: `Walk-ins (${walkins.length})` },
+                ] as { key: AttendanceTab; label: string }[]).map(tab => (
+                  <button
+                    key={tab.key}
+                    onClick={() => setAttendanceTab(tab.key)}
+                    className={`flex-1 py-1.5 rounded-md text-sm font-semibold transition-colors ${
+                      attendanceTab === tab.key
+                        ? 'bg-white text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              {/* Attendee list */}
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {(attendanceTab === 'going' ? attendanceGoing : attendanceCantGo).length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    No responses yet.
-                  </p>
-                ) : (
-                  (attendanceTab === 'going' ? attendanceGoing : attendanceCantGo).map((person, i) => (
-                    <div key={person.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${
-                        attendanceTab === 'going'
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-600'
-                      }`}>
-                        {(person.full_name ?? 'U')[0].toUpperCase()}
+              {/* Tab content */}
+              <div className="px-6 mt-4 pb-4 space-y-2 min-h-[200px]">
+
+                {/* ── Going tab ── */}
+                {attendanceTab === 'going' && (
+                  goingRecords.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-10">
+                      No one has RSVPed as going yet.
+                    </p>
+                  ) : (
+                    goingRecords.map(record => (
+                      <div
+                        key={record.id}
+                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                          record.attended
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-card border-border hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-sm font-bold ${
+                            record.attended ? 'bg-green-500 text-white' : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {(record.full_name ?? 'U')[0].toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-foreground truncate">
+                              {record.full_name ?? 'Unknown'}
+                            </p>
+                            {record.email && (
+                              <p className="text-xs text-muted-foreground truncate">{record.email}</p>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => toggleConfirmed(record.id, record.attended)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ml-3 ${
+                            record.attended
+                              ? 'bg-green-500 text-white hover:bg-green-600'
+                              : 'bg-muted text-muted-foreground hover:bg-green-100 hover:text-green-700 border border-border'
+                          }`}
+                        >
+                          {record.attended ? (
+                            <><CheckCircle2 className="h-3.5 w-3.5" /> Confirmed</>
+                          ) : (
+                            <><Circle className="h-3.5 w-3.5" /> Confirm</>
+                          )}
+                        </button>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">
-                          {person.full_name ?? 'Unknown User'}
-                        </p>
-                        {person.email && (
-                          <p className="text-xs text-muted-foreground truncate">{person.email}</p>
-                        )}
+                    ))
+                  )
+                )}
+
+                {/* ── Can't Go tab ── */}
+                {attendanceTab === 'cant_go' && (
+                  cantGoRecords.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-10">
+                      No one has marked Can&apos;t Go yet.
+                    </p>
+                  ) : (
+                    cantGoRecords.map(record => (
+                      <div key={record.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-muted/30 transition-colors">
+                        <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 text-sm font-bold">
+                          {(record.full_name ?? 'U')[0].toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">
+                            {record.full_name ?? 'Unknown'}
+                          </p>
+                          {record.email && (
+                            <p className="text-xs text-muted-foreground truncate">{record.email}</p>
+                          )}
+                        </div>
+                        <span className="ml-auto shrink-0 px-2 py-0.5 rounded-full bg-red-100 text-red-600 text-xs font-semibold">
+                          Can&apos;t Go
+                        </span>
                       </div>
+                    ))
+                  )
+                )}
+
+                {/* ── Walk-ins tab ── */}
+                {attendanceTab === 'walkins' && (
+                  <div className="space-y-3">
+                    {/* Add walk-in form */}
+                    <div className="border border-dashed border-border rounded-xl p-4 bg-muted/20">
+                      <p className="text-sm font-semibold text-foreground mb-3 flex items-center gap-1.5">
+                        <UserPlus className="h-4 w-4" />
+                        Add Walk-in / Manual Entry
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Name *</Label>
+                          <Input
+                            value={walkinName}
+                            onChange={e => setWalkinName(e.target.value)}
+                            placeholder="Full name"
+                            onKeyDown={e => e.key === 'Enter' && addWalkin()}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Notes (optional)</Label>
+                          <Input
+                            value={walkinNotes}
+                            onChange={e => setWalkinNotes(e.target.value)}
+                            placeholder="e.g. From another campus"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        className="mt-3"
+                        onClick={addWalkin}
+                        disabled={addingWalkin || !walkinName.trim()}
+                      >
+                        <Plus className="h-4 w-4 mr-1.5" />
+                        {addingWalkin ? 'Adding...' : 'Add Person'}
+                      </Button>
                     </div>
-                  ))
+
+                    {/* Walk-in list */}
+                    {walkins.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-6">
+                        No walk-ins added yet.
+                      </p>
+                    ) : (
+                      walkins.map((w, i) => (
+                        <div
+                          key={w.id}
+                          className="flex items-center justify-between p-3 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100/60 transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-purple-200 text-purple-700 flex items-center justify-center shrink-0 text-sm font-bold">
+                              {w.name[0].toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-semibold text-foreground truncate">{w.name}</p>
+                              {w.notes ? (
+                                <p className="text-xs text-muted-foreground truncate">{w.notes}</p>
+                              ) : (
+                                <p className="text-xs text-muted-foreground">Walk-in #{i + 1}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0 ml-3">
+                            <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-700 text-xs font-semibold">
+                              Present
+                            </span>
+                            <button
+                              onClick={() => deleteWalkin(w.id)}
+                              className="p-1.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 )}
               </div>
             </div>
           )}
+
+          {/* Dialog footer — Export button */}
+          <div className="px-6 py-4 border-t border-border shrink-0 flex items-center justify-between gap-3 bg-muted/30">
+            <p className="text-xs text-muted-foreground">
+              {totalPresent} total present · {attendanceRecords.length + walkins.length} total responses
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              disabled={attendanceRecords.length === 0 && walkins.length === 0}
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              Export to Excel
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
