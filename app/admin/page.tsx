@@ -1,13 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Megaphone, Image, Video, Heart, Users, ShieldCheck, ClipboardList } from 'lucide-react'
+import { Megaphone, Image, Video, Heart, Users, ShieldCheck, ClipboardList, BookOpen } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function AdminDashboard() {
   const supabase = await createClient()
 
   // Fetch counts
-  const [announcements, albums, videos, prayers, users, adminReqs, forms] = await Promise.all([
+  const [announcements, albums, videos, prayers, users, adminReqs, forms, dgroups] = await Promise.all([
     supabase.from('announcements').select('id', { count: 'exact', head: true }),
     supabase.from('albums').select('id', { count: 'exact', head: true }),
     supabase.from('videos').select('id', { count: 'exact', head: true }),
@@ -15,6 +15,7 @@ export default async function AdminDashboard() {
     supabase.from('profiles').select('id', { count: 'exact', head: true }),
     supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('requested_admin', true),
     supabase.from('forms').select('id', { count: 'exact', head: true }),
+    supabase.from('dgroup_registrations').select('id', { count: 'exact', head: true }),
   ])
 
   const stats = [
@@ -68,6 +69,13 @@ export default async function AdminDashboard() {
       href: '/admin/forms',
       color: 'bg-indigo-50 text-indigo-600',
     },
+    {
+      label: 'DGroups',
+      count: dgroups.count || 0,
+      icon: BookOpen,
+      href: '/admin/dgroups',
+      color: 'bg-green-50 text-green-700',
+    },
   ]
 
   return (
@@ -78,7 +86,7 @@ export default async function AdminDashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8">
         {stats.map((stat) => {
           const Icon = stat.icon
           return (

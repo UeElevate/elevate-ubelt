@@ -163,7 +163,7 @@ export default async function HomePage() {
           </p>
 
           <div className="flex flex-wrap items-center justify-center gap-3 mt-8">
-            <Link href="/auth/sign-up">
+            <Link href="/dgroup">
               <button className="px-7 py-3 rounded-sm bg-white text-foreground text-sm font-bold uppercase tracking-widest hover:bg-white/90 transition-colors">
                 Be Part of a DGroup
               </button>
