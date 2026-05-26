@@ -114,17 +114,9 @@ export function AdminSidebar() {
       <aside className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-foreground text-background flex-col z-50">
         <div className="p-4 border-b border-background/20">
           <img src="/elevate_ubelt_logo.png" alt="Elevate UBelt" className="h-8 w-auto mb-3 brightness-0 invert" />
-          <div className="flex gap-1 bg-background/10 rounded-xl p-1">
-            <span className="flex-1 text-center py-2 text-xs font-bold rounded-lg bg-background text-foreground cursor-default">
-              Admin Panel
-            </span>
-            <Link
-              href="/"
-              className="flex-1 text-center py-2 text-xs font-bold rounded-lg text-background/60 hover:text-background hover:bg-background/10 transition-colors"
-            >
-              Main Site
-            </Link>
-          </div>
+          <span className="block text-center py-2 text-xs font-bold rounded-lg bg-background/10 text-background/80">
+            Admin Panel
+          </span>
         </div>
         
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
