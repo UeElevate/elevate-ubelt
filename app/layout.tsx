@@ -7,8 +7,8 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'Youth Ministry',
-  description: 'Welcome to our Youth Ministry - Connect, Grow, Serve',
+  title: 'Elevate UBelt',
+  description: 'Elevate University Belt - Faith, Fellowship, Purpose',
   generator: 'v0.app',
   icons: {
     icon: '/elevate.jpg',
